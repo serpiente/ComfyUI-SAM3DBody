@@ -7,6 +7,7 @@ Displays rigged FBX files with interactive skeleton manipulation.
 """
 
 import os
+import numpy as np
 import folder_paths
 
 
@@ -116,6 +117,18 @@ class SAM3DBodyPreviewSkeleton:
                 joint_rotations = joint_rotations.cpu().numpy()
             joint_rotations_list = joint_rotations.tolist()
 
+        # Get joint parents for proper bone hierarchy
+        joint_parents = skeleton.get("joint_parents")
+        joint_parents_list = None
+
+        if joint_parents is not None:
+            if isinstance(joint_parents, np.ndarray):
+                joint_parents_list = joint_parents.tolist()
+            elif isinstance(joint_parents, torch.Tensor):
+                joint_parents_list = joint_parents.cpu().numpy().tolist()
+            else:
+                joint_parents_list = list(joint_parents)
+
         # Save skeleton data to temporary JSON file for viewer
         output_dir = folder_paths.get_output_directory()
         skeleton_json_path = os.path.join(output_dir, "_temp_skeleton_preview.json")
@@ -123,6 +136,7 @@ class SAM3DBodyPreviewSkeleton:
         skeleton_data = {
             "joint_positions": joint_positions_list,
             "joint_rotations": joint_rotations_list,
+            "joint_parents": joint_parents_list,
             "num_joints": len(joint_positions_list),
         }
 
