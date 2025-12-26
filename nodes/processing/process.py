@@ -7,11 +7,54 @@ Performs 3D human mesh reconstruction from a single image.
 """
 
 import os
+import glob
 import tempfile
 import torch
 import numpy as np
 import cv2
+import folder_paths
 from ..base import comfy_image_to_numpy, comfy_mask_to_numpy
+
+
+def find_mhr_model_path(mesh_data=None):
+    """Find the MHR model path using multiple fallback strategies."""
+    # Strategy 1: Check mesh_data for explicitly provided path
+    if mesh_data and mesh_data.get("mhr_path"):
+        mhr_path = mesh_data["mhr_path"]
+        if os.path.exists(mhr_path):
+            return mhr_path
+
+    # Strategy 2: Check environment variable
+    env_path = os.environ.get("SAM3D_MHR_PATH", "")
+    if env_path and os.path.exists(env_path):
+        return env_path
+
+    # Strategy 3: Search ComfyUI models/sam3dbody/ folder
+    sam3dbody_dir = os.path.join(folder_paths.models_dir, "sam3dbody", "assets", "mhr_model.pt")
+    if os.path.exists(sam3dbody_dir):
+        return sam3dbody_dir
+
+    # Strategy 4: Search HuggingFace cache
+    hf_cache_base = os.path.expanduser("~/.cache/huggingface/hub/models--facebook--sam-3d-body-dinov3")
+    if os.path.exists(hf_cache_base):
+        pattern = os.path.join(hf_cache_base, "snapshots", "*", "assets", "mhr_model.pt")
+        matches = glob.glob(pattern)
+        if matches:
+            return matches[0]
+
+    return None
+
+
+def load_joint_parents_from_mhr(mhr_path):
+    """Load joint parents from MHR model file."""
+    if not mhr_path or not os.path.exists(mhr_path):
+        return None
+    try:
+        mhr_model = torch.jit.load(mhr_path, map_location='cpu')
+        joint_parents = mhr_model.character_torch.skeleton.joint_parents
+        return joint_parents.cpu().numpy()
+    except Exception:
+        return None
 
 
 class SAM3DBodyProcess:
@@ -161,6 +204,9 @@ class SAM3DBodyProcess:
         }
 
         # Add joint parent hierarchy from the MHR model
+        joint_parents = None
+
+        # Try in-memory model first
         try:
             if hasattr(sam_3d_model, 'mhr_head') and hasattr(sam_3d_model.mhr_head, 'mhr'):
                 mhr = sam_3d_model.mhr_head.mhr
@@ -169,9 +215,17 @@ class SAM3DBodyProcess:
                     if hasattr(skeleton_obj, 'joint_parents'):
                         parent_tensor = skeleton_obj.joint_parents
                         if isinstance(parent_tensor, torch.Tensor):
-                            skeleton["joint_parents"] = parent_tensor.cpu().numpy()
+                            joint_parents = parent_tensor.cpu().numpy()
         except Exception:
             pass
+
+        # Fallback: load from MHR model file
+        if joint_parents is None:
+            mhr_path = model.get("mhr_path") or find_mhr_model_path(mesh_data)
+            joint_parents = load_joint_parents_from_mhr(mhr_path)
+
+        if joint_parents is not None:
+            skeleton["joint_parents"] = joint_parents
 
         # Create debug visualization
         from ..base import numpy_to_comfy_image
@@ -388,6 +442,9 @@ class SAM3DBodyProcessAdvanced:
         }
 
         # Add joint parent hierarchy from the MHR model
+        joint_parents = None
+
+        # Try in-memory model first
         try:
             if hasattr(sam_3d_model, 'mhr_head') and hasattr(sam_3d_model.mhr_head, 'mhr'):
                 mhr = sam_3d_model.mhr_head.mhr
@@ -396,9 +453,17 @@ class SAM3DBodyProcessAdvanced:
                     if hasattr(skeleton_obj, 'joint_parents'):
                         parent_tensor = skeleton_obj.joint_parents
                         if isinstance(parent_tensor, torch.Tensor):
-                            skeleton["joint_parents"] = parent_tensor.cpu().numpy()
+                            joint_parents = parent_tensor.cpu().numpy()
         except Exception:
             pass
+
+        # Fallback: load from MHR model file
+        if joint_parents is None:
+            mhr_path = find_mhr_model_path()
+            joint_parents = load_joint_parents_from_mhr(mhr_path)
+
+        if joint_parents is not None:
+            skeleton["joint_parents"] = joint_parents
 
         # Create debug visualization
         from ..base import numpy_to_comfy_image
