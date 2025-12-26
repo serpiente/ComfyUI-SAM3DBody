@@ -215,12 +215,47 @@ const SKELETON_VIEWER_HTML = `
                 jointMeshes.push(mesh);
             }
 
-            // Create bones using parent hierarchy
+            // Create bones using skeleton links (preferred) or parent hierarchy (fallback)
+            const skeletonLinks = skeletonData.skeleton_links;
             const jointParents = skeletonData.joint_parents;
             const bones = [];
 
-            if (jointParents && jointParents.length > 0) {
-                // Use proper parent hierarchy
+            if (skeletonLinks && skeletonLinks.length > 0) {
+                // Use explicit skeleton links (best method)
+                console.log(\`[SAM3DBody Skeleton Viewer] Using skeleton links with \${skeletonLinks.length} connections\`);
+
+                for (const link of skeletonLinks) {
+                    const idx1 = link[0];
+                    const idx2 = link[1];
+
+                    // Skip invalid indices
+                    if (idx1 < 0 || idx1 >= numJoints || idx2 < 0 || idx2 >= numJoints) {
+                        continue;
+                    }
+
+                    const pos1 = jointMeshes[idx1].position;
+                    const pos2 = jointMeshes[idx2].position;
+
+                    const direction = new THREE.Vector3().subVectors(pos2, pos1);
+                    const length = direction.length();
+
+                    if (length > 0.001) {
+                        const boneGeometry = new THREE.CylinderGeometry(0.005, 0.005, length, 8);
+                        const boneMesh = new THREE.Mesh(boneGeometry, boneMaterial);
+
+                        // Position and orient cylinder
+                        boneMesh.position.copy(pos1).add(direction.clone().multiplyScalar(0.5));
+                        boneMesh.quaternion.setFromUnitVectors(
+                            new THREE.Vector3(0, 1, 0),
+                            direction.normalize()
+                        );
+
+                        skeletonGroup.add(boneMesh);
+                        bones.push(boneMesh);
+                    }
+                }
+            } else if (jointParents && jointParents.length > 0) {
+                // Fallback: use parent hierarchy
                 console.log(\`[SAM3DBody Skeleton Viewer] Using parent hierarchy with \${jointParents.length} parents\`);
 
                 for (let childIdx = 0; childIdx < jointParents.length; childIdx++) {
@@ -241,7 +276,6 @@ const SKELETON_VIEWER_HTML = `
                         const boneGeometry = new THREE.CylinderGeometry(0.005, 0.005, length, 8);
                         const boneMesh = new THREE.Mesh(boneGeometry, boneMaterial);
 
-                        // Position and orient cylinder
                         boneMesh.position.copy(pos1).add(direction.clone().multiplyScalar(0.5));
                         boneMesh.quaternion.setFromUnitVectors(
                             new THREE.Vector3(0, 1, 0),
@@ -253,34 +287,7 @@ const SKELETON_VIEWER_HTML = `
                     }
                 }
             } else {
-                // Fallback: use distance-based heuristic (less accurate)
-                console.warn('[SAM3DBody Skeleton Viewer] No parent hierarchy available, using distance-based fallback');
-                const connectionThreshold = 0.15 * scale; // Tighter threshold
-
-                for (let i = 0; i < numJoints; i++) {
-                    for (let j = i + 1; j < numJoints; j++) {
-                        const pos1 = jointMeshes[i].position;
-                        const pos2 = jointMeshes[j].position;
-                        const distance = pos1.distanceTo(pos2);
-
-                        if (distance < connectionThreshold && distance > 0.001) {
-                            const direction = new THREE.Vector3().subVectors(pos2, pos1);
-                            const length = direction.length();
-
-                            const boneGeometry = new THREE.CylinderGeometry(0.005, 0.005, length, 8);
-                            const boneMesh = new THREE.Mesh(boneGeometry, boneMaterial);
-
-                            boneMesh.position.copy(pos1).add(direction.clone().multiplyScalar(0.5));
-                            boneMesh.quaternion.setFromUnitVectors(
-                                new THREE.Vector3(0, 1, 0),
-                                direction.normalize()
-                            );
-
-                            skeletonGroup.add(boneMesh);
-                            bones.push(boneMesh);
-                        }
-                    }
-                }
+                console.warn('[SAM3DBody Skeleton Viewer] No skeleton links or parent hierarchy available');
             }
 
             console.log(\`[SAM3DBody Skeleton Viewer] Created \${bones.length} bone connections\`);

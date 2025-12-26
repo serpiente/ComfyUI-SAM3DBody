@@ -129,6 +129,29 @@ class SAM3DBodyPreviewSkeleton:
             else:
                 joint_parents_list = list(joint_parents)
 
+        # MHR70 skeleton links (65 bone connections for first 70 keypoints)
+        # Derived from mhr70.py skeleton_info - maps joint names to indices
+        # Format: [[joint_a_idx, joint_b_idx], ...]
+        skeleton_links = [
+            [13, 11], [11, 9], [14, 12], [12, 10],  # legs
+            [9, 10], [5, 9], [6, 10], [5, 6],  # torso
+            [5, 7], [6, 8], [7, 62], [8, 41],  # arms (wrist indices: left=62, right=41)
+            [1, 2], [0, 1], [0, 2], [1, 3], [2, 4], [3, 5], [4, 6],  # face/head
+            [13, 15], [13, 16], [13, 17], [14, 18], [14, 19], [14, 20],  # feet
+            # Left hand (wrist=62)
+            [62, 45], [45, 44], [44, 43], [43, 42],  # thumb
+            [62, 49], [49, 48], [48, 47], [47, 46],  # index
+            [62, 53], [53, 52], [52, 51], [51, 50],  # middle
+            [62, 57], [57, 56], [56, 55], [55, 54],  # ring
+            [62, 61], [61, 60], [60, 59], [59, 58],  # pinky
+            # Right hand (wrist=41)
+            [41, 24], [24, 23], [23, 22], [22, 21],  # thumb
+            [41, 28], [28, 27], [27, 26], [26, 25],  # index
+            [41, 32], [32, 31], [31, 30], [30, 29],  # middle
+            [41, 36], [36, 35], [35, 34], [34, 33],  # ring
+            [41, 40], [40, 39], [39, 38], [38, 37],  # pinky
+        ]
+
         # Save skeleton data to temporary JSON file for viewer
         output_dir = folder_paths.get_output_directory()
         skeleton_json_path = os.path.join(output_dir, "_temp_skeleton_preview.json")
@@ -137,6 +160,7 @@ class SAM3DBodyPreviewSkeleton:
             "joint_positions": joint_positions_list,
             "joint_rotations": joint_rotations_list,
             "joint_parents": joint_parents_list,
+            "skeleton_links": skeleton_links,
             "num_joints": len(joint_positions_list),
         }
 
